@@ -7,15 +7,24 @@
 #define DC_JUMPER 0  // I2C Addres: 0 - 0x3C, 1 - 0x3D
 
 #include <TimeLib.h> 
+#include <Timezone.h>
 
 #include <WiFiUdp.h>
 
 const char* ssid = "**********";
 const char* password = "*********";
 
+
+
 // Create an instance of the server
 // specify the port to listen on as an argument
 WiFiServer server(80);
+
+TimeChangeRule BST = {"PST", Last, Sun, Mar, 1, 60};        //British Summer Time -  "UTC + 1" or GMT + 1
+TimeChangeRule GMT = {"GMT", Last, Sun, Oct, 2, 0};         //British Winter Time -  "UTC + 0" or GMT 
+Timezone UKT(BST, GMT);
+TimeChangeRule *tcr;        //pointer to the time change rule, use to get TZ abbrev
+
 
 int power[8]={1,2,4,8,16,32,64,128};
 
@@ -50,12 +59,10 @@ int segment_lookup[10]={B00111111, B00000110, B01011011, B01001111, B01100110,
    B01101101, B01111101, B00000111, B01111111, B01100111};
 
 
-
 unsigned int localPort = 2390;      // local port to listen for UDP packets
 
 IPAddress timeServerIP; // time.nist.gov NTP server address
 const char* ntpServerName = "0.uk.pool.ntp.org";
-const int timeZone = 0;     // Grenwich Mean Time
 
 const int NTP_PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of the message
 time_t prevDisplay = 0; // when the digital clock was displayed
@@ -282,6 +289,7 @@ void Animate_Digit(MicroOLED &oled,byte digit,byte prev_digit, byte offset, byte
 
 time_t getNtpTime()
 {
+   time_t utc, local;
    while (udp.parsePacket() > 0) ; // discard any previously received packets
    //get a random server from the pool
    WiFi.hostByName(ntpServerName, timeServerIP); 
@@ -299,7 +307,9 @@ time_t getNtpTime()
          secsSince1900 |= (unsigned long)packetBuffer[41] << 16;
          secsSince1900 |= (unsigned long)packetBuffer[42] << 8;
          secsSince1900 |= (unsigned long)packetBuffer[43];
-         return secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR;
+         utc = secsSince1900 - 2208988800UL;
+         local = UKT.toLocal(utc);
+         return local;
       }
    }
    Serial.println("No NTP Response :-(");
